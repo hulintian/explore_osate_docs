@@ -16,6 +16,38 @@
 
 **OSATE2** 是由卡内基梅隆大学软件工程研究所(SEI)维护的开源AADL工具环境，用于嵌入式实时系统的架构建模、分析和代码生成。
 
+```mermaid
+graph TB
+    subgraph OSATE2[OSATE2 工具环境]
+        subgraph UI[用户界面]
+            TextEditor[文本编辑器]
+            GraphEditor[图形编辑器]
+        end
+
+        subgraph Functions[核心功能]
+            Modeling[AADL建模]
+            Analysis[系统分析]
+            Verification[验证保证]
+            CodeGen[代码生成]
+        end
+
+        subgraph Extensions[扩展模块]
+            EMV2[错误模型 EMV2]
+            BA[行为附件 BA]
+            ALISA[ALISA工作台]
+        end
+    end
+
+    User([用户]) --> UI
+    UI --> Functions
+    Functions --> Extensions
+    Functions --> Output([分析报告/生成代码])
+
+    style OSATE2 fill:#e3f2fd
+    style Functions fill:#fff3e0
+    style Extensions fill:#e8f5e9
+```
+
 ### 核心数据
 
 | 项目属性 | 值 |
