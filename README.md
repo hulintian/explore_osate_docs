@@ -15,6 +15,22 @@
 | [技术架构](04_技术架构.md) | 技术栈、构建系统、扩展机制 |
 | [开发指南](05_开发指南.md) | 开发环境、构建方法、扩展开发 |
 
+### 源码级设计文档
+
+基于源码深入分析的设计文档，覆盖核心子系统的内部架构与实现细节：
+
+| 文档 | 描述 |
+|------|------|
+| [AADL2 元模型设计](06_AADL2元模型设计.md) | Ecore 元模型类层次、Type-Implementation 分离、Feature/Connection/Flow/Property 建模、实例模型设计 |
+| [实例化引擎设计](07_实例化引擎设计.md) | InstantiateModel 八阶段流程、连接多段追踪、SOM 枚举、属性缓存、性能优化 |
+| [Xtext 语言集成设计](08_Xtext语言集成设计.md) | 非标准 Xtext 架构、双语法层次、多层作用域、Annex 解析集成、RuntimeModule 绑定 |
+| [分析框架设计](09_分析框架设计.md) | Handler 层次、触发流程、Result 元模型、流延迟分析算法、Marker 生成、扩展模式 |
+| [EMV2 错误模型与图形编辑器设计](10_EMV2错误模型与图形编辑器设计.md) | EMV2 语法/类型系统/状态机、故障树生成算法、传播图、GE Business Object Handler 模式、双向同步 |
+| [ALISA 验证框架与 Annex 支持设计](11_ALISA验证框架与Annex支持设计.md) | ReqSpec/Verify/Alisa/Assure 四层流水线、验证方法类型、需求追溯、Annex 注册表体系 |
+| [行为附件设计](12_行为附件设计.md) | ANTLR 4.4 语法、BehaviorAnnex 元模型、动作语言、状态机验证、GE 集成 |
+| [UI 框架与导航设计](13_UI框架与导航设计.md) | AADL 导航器、属性视图、向导框架、首选项页面、错误 Marker 框架、命令/Handler 体系 |
+| [构建系统与测试设计](14_构建系统与测试设计.md) | Maven/Tycho 构建层次、目标平台、测试基础设施、产品打包、CI/CD 流水线、代码生成 |
+
 ### 子项目详细文档
 
 | 子项目 | 描述 | 重要性 |
