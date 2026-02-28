@@ -590,3 +590,210 @@ PluginSupportUtil {
 - `org.eclipse.ui.views` — Assurance View, Requirements Coverage View
 - `org.eclipse.ui.newWizards` — 保证计划文件创建向导
 - `org.eclipse.xtext.builder.participant` — 增量构建集成
+
+## 14. org.osate.reqtrace 需求追踪矩阵生成
+
+### 14.1 模块定位与现状
+
+**源码路径：** `/home/hlt/project/explore_osate/osate2/alisa/org.osate.reqtrace/`
+
+`org.osate.reqtrace` 是 ALISA 验证框架体系中专门用于生成**需求追踪矩阵（Requirements Traceability Matrix, RTM）** 的独立插件模块。其 Maven 构建配置文件如下：
+
+```xml
+<!-- 文件：/home/hlt/project/explore_osate/osate2/alisa/org.osate.reqtrace/pom.xml -->
+<project>
+  <parent>
+    <groupId>org.osate</groupId>
+    <artifactId>alisa.parent</artifactId>
+    <version>2.11.0.vfinal</version>
+  </parent>
+  <groupId>org.osate</groupId>
+  <artifactId>org.osate.reqtrace</artifactId>
+  <version>2.0.3-SNAPSHOT</version>
+  <packaging>eclipse-plugin</packaging>
+</project>
+```
+
+需要特别注意的是：当前仓库中 `org.osate.reqtrace` 目录内**仅包含 `pom.xml` 文件**，没有任何 Java 源文件、`plugin.xml`、`META-INF/MANIFEST.MF` 或其他资源文件。这一现象意味着：
+
+1. **模块处于预规划/占位阶段**：`pom.xml` 中的版本号 `2.0.3-SNAPSHOT` 表明它已被纳入项目的版本管理体系，但功能实现尚未合并到当前代码分支。
+2. **从父 POM 中移除**：`alisa/pom.xml` 的 `<modules>` 列表中并未包含 `org.osate.reqtrace`，当前构建流程会跳过此模块。
+3. **功能意图明确**：从命名和位置（位于 ALISA 验证框架 `alisa/` 目录下）可以推断其功能定位是对 `org.osate.reqspec`（需求规格）、`org.osate.verify`（验证计划）、`org.osate.assure`（保证结果）等模块的数据进行横向整合，生成可导出的追踪矩阵。
+
+### 14.2 需求追踪矩阵的概念背景
+
+在基于模型的系统工程（MBSE）流程中，需求追踪矩阵（RTM）是核对"每项需求都被验证了吗？每项验证都源自需求吗？"的关键文档。OSATE2/ALISA 框架的完整数据模型天然具备生成 RTM 的所有数据：
+
+```
+需求层（ReqSpec）
+  SystemRequirementSet / GlobalRequirementSet
+    └── Requirement (id, title, description, category, targetElement)
+
+验证层（Verify）
+  VerificationPlan
+    └── Claim
+         └── VerificationActivity (method, precondition, computes)
+
+保证层（Assure）
+  AssuranceCaseResult
+    └── ModelResult
+         └── ClaimResult
+              └── VerificationActivityResult (resultType: success/fail/...)
+                   └── Metrics (tbdCount, successCount, failCount, ...)
+```
+
+`org.osate.reqtrace` 的预期功能是将上述三层数据关联为如下矩阵结构：
+
+| 需求 ID | 需求描述 | 目标组件 | 验证方法 | 验证状态 | 覆盖率 |
+|---------|---------|---------|---------|---------|--------|
+| SR-001  | 响应时间 < 10ms | FlightControl.impl | checkLatency | PASS | 100% |
+| SR-002  | 故障安全隔离 | WBS_inst | EMV2Analysis | FAIL | 100% |
+| SR-003  | 冗余切换  | ControlSys.impl | RedundancyCheck | TBD | 0% |
+
+### 14.3 与 ALISA 体系各模块的数据关联
+
+`org.osate.reqtrace` 需要读取以下模块产生的模型数据：
+
+#### 14.3.1 来自 org.osate.reqspec 的需求数据
+
+`ReqSpec.xtext`（位于 `/home/hlt/project/explore_osate/osate2/alisa/org.osate.reqspec/src/org/osate/reqspec/ReqSpec.xtext`）定义了需求的核心语法结构：
+
+```xtext
+SystemRequirementSet returns RequirementSet:
+  'system' 'requirements' name=QualifiedName
+  'for' target=[aadl2::ComponentClassifier|AadlClassifierReference]
+  '[' (requirements+=SystemRequirement | ...)* ']'
+;
+
+SystemRequirement returns Requirement:
+  'requirement' name=ID (':' title=STRING)?
+  ('for' targetElement=[aadl2::NamedElement|ID])?
+  '[' (
+      ('category' category+=[categories::Category|QualifiedName]+)
+    | description=Description
+    | ('refines' refinesReference+=[Requirement|QualifiedName]+)
+    | ('decomposes' decomposesReference+=[Requirement|QualifiedName]+)
+    | ('see' 'goal' goalReference+=[Goal|QualifiedName]+)
+    | ...
+  )* ']'
+;
+```
+
+RTM 生成需要从此处提取：需求 ID (`name`)、标题 (`title`)、目标组件 (`target`)、目标元素 (`targetElement`)、类别 (`category`)、层级关系 (`refinesReference`/`decomposesReference`)。
+
+#### 14.3.2 来自 org.osate.verify 的验证计划数据
+
+验证层记录了每条需求对应的验证活动（`VerificationActivity`），包括使用的验证方法（`JavaMethod`/`PluginMethod`/`AgreeMethod`/`ResoluteMethod`/`ManualMethod`）。追踪矩阵需从此处提取方法名称和参数。
+
+#### 14.3.3 来自 org.osate.assure 的执行结果数据
+
+`org.osate.assure` 的 EMF 模型（位于 `/home/hlt/project/explore_osate/osate2/alisa/org.osate.assure/src/org/osate/assure/assure/`）提供运行时结果：
+
+```java
+// VerificationResult.java — 验证结果枚举
+// 包路径：org.osate.assure.assure
+// 可能的状态值：SUCCESS, FAIL, TIMEOUT, ERROR, TBD, SKIPPED
+
+// Metrics.java — 覆盖率指标聚合
+// 包路径：org.osate.assure.assure
+// 字段：tbdCount, successCount, failCount, errorCount, timeoutCount,
+//       skippedCount, didelCount, claimCount, requirementCount
+
+// ClaimResult.java — 每条 Claim 的执行快照
+// ModelResult.java — 每个实例模型的整体结果快照
+// AssuranceCaseResult.java — 整个保证案例的顶层结果
+```
+
+### 14.4 预期的功能架构设计
+
+根据 ALISA 框架的架构模式，`org.osate.reqtrace` 预期实现如下功能组件：
+
+#### 14.4.1 数据聚合器（Traceability Aggregator）
+
+```
+RequirementsTraceabilityAggregator
+  ├── loadRequirements(IProject project)
+  │     从工作区加载所有 .reqspec 文件，收集 SystemRequirementSet
+  ├── loadVerificationPlans(IProject project)
+  │     从工作区加载所有 .verify 文件，建立 Requirement→Claim 映射
+  ├── loadAssuranceResults(IProject project)
+  │     从工作区加载所有 .assure 文件，获取 ClaimResult 列表
+  └── buildMatrix()
+        输出 List<TraceabilityRow>，每行对应一个 (Requirement, Claim, Result) 三元组
+```
+
+#### 14.4.2 矩阵模型
+
+```java
+// 预期的 TraceabilityRow 数据结构
+class TraceabilityRow {
+    String requirementId;          // 来自 Requirement.name
+    String requirementTitle;       // 来自 Requirement.title
+    ComponentClassifier target;    // 来自 RequirementSet.target
+    NamedElement targetElement;    // 来自 Requirement.targetElement
+    List<Category> categories;     // 来自 Requirement.category
+    String verificationMethod;     // 来自 VerificationActivity.method
+    VerificationResult resultType; // 来自 VerificationActivityResult.resultType
+    boolean covered;               // 是否存在对应的验证活动
+}
+```
+
+#### 14.4.3 导出格式（预期支持）
+
+基于 OSATE2 其他报告工具的惯例，RTM 工具预期支持以下导出格式：
+
+| 格式 | 用途 |
+|------|------|
+| CSV  | 通用电子表格导入（Excel/LibreOffice） |
+| HTML | 可在浏览器中直接查看的追踪表格 |
+| Eclipse Marker | 在 IDE 中标注未覆盖的需求 |
+| Markdown | 文档集成（与 ReqDocument 关联） |
+
+### 14.5 与现有追踪机制的关系
+
+`org.osate.reqtrace` 并不重新实现追踪链接，而是**消费并可视化**已有的追踪关系。ALISA 框架中现有的追踪机制包括：
+
+| 追踪方式 | 定义位置 | reqtrace 的消费方式 |
+|---------|---------|-------------------|
+| `Requirement.targetElement` | `ReqSpec.xtext` | 矩阵"目标元素"列 |
+| `Claim.requirement` | `Verify.xtext` | 建立需求→验证映射 |
+| `VerificationActivityResult` | `Assure` 执行结果 | 填充"状态"列 |
+| `Metrics.requirementCount` | `Metrics.java` | 计算需求覆盖率 |
+| `Requirement.category` | `ReqSpec.xtext` | 支持按类别过滤矩阵 |
+| `Requirement.refinesReference` | `ReqSpec.xtext` | 需求层级展开 |
+
+### 14.6 模块在 ALISA 工作流中的位置
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                     ALISA 完整工作流                                │
+│                                                                    │
+│  1. [org.osate.reqspec]     编写需求规格 (.reqspec)                 │
+│         ↓                                                          │
+│  2. [org.osate.verify]      定义验证计划 (.verify)                  │
+│         ↓                                                          │
+│  3. [org.osate.alisa.workbench] 组织保证案例 (.alisa)               │
+│         ↓                                                          │
+│  4. [org.osate.assure]      执行验证，生成结果 (.assure)             │
+│         ↓                                                          │
+│  5. [org.osate.reqtrace]    ← 当前模块                             │
+│         读取前四步的全部数据                                          │
+│         生成需求追踪矩阵（RTM）                                       │
+│         支持需求覆盖率报告和差距分析                                   │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### 14.7 构建状态与版本信息
+
+| 属性 | 值 |
+|------|----|
+| Maven GroupId | `org.osate` |
+| Maven ArtifactId | `org.osate.reqtrace` |
+| 当前版本 | `2.0.3-SNAPSHOT` |
+| 父构建版本 | ALISA 2.11.0.vfinal（pom.xml 中引用） |
+| 打包类型 | `eclipse-plugin` |
+| 在父 POM 中的状态 | **未激活**（`alisa/pom.xml` modules 列表中未包含） |
+| 源文件状态 | 仅 `pom.xml`，无 Java 源文件 |
+| 实际源码路径 | `/home/hlt/project/explore_osate/osate2/alisa/org.osate.reqtrace/pom.xml` |
+
+这一状态表明 `org.osate.reqtrace` 是已规划但尚未在本代码分支实现的功能模块，其在 ALISA 体系中的数据来源和集成点已由 `reqspec`、`verify`、`assure` 三个模块的成熟接口明确定义，实现上有清晰的路径可循。
