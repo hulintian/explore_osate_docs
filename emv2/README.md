@@ -1,269 +1,302 @@
-# EMV2 错误模型版本2
+# EMV2 错误模型
 
-## 模块概述
+EMV2（Error Model Version 2）是 AADL 的错误模型附件（Error Model Annex）实现，通过 Xtext DSL 和 EMF 元模型，提供系统级的错误建模、错误传播分析和故障树生成功能，是进行安全性与可靠性分析的核心模块。
 
-EMV2 (Error Model Version 2) 是AADL的错误模型附件（Error Model Annex）实现，提供了系统级的错误建模、分析和故障树生成功能。这是进行安全性和可靠性分析的核心模块。
+源码位置：`osate2/emv2/`，12 个 Eclipse 插件，90,018 行 Java + 12,497 行 Xtend + 304 个 AADL 测试文件。
 
-## 主要组件
+---
 
-### 核心错误模型
-- **org.osate.xtext.aadl2.errormodel** - 错误模型语言核心实现（基于Xtext）
-- **org.osate.xtext.aadl2.errormodel.ui** - 错误模型编辑器UI
-- **org.osate.xtext.aadl2.errormodel.edit** - 模型编辑支持
-- **org.osate.xtext.aadl2.errormodel.feature** - 功能特性定义
+## 1. 插件组织
 
-### 错误模型实例
-- **org.osate.aadl2.errormodel.instance** - 错误模型实例化
-- **org.osate.aadl2.errormodel.contrib** - 错误模型属性贡献
+| 插件 | 职责 |
+|------|------|
+| `org.osate.xtext.aadl2.errormodel` | Xtext 语法、EMF 元模型、语义验证、作用域 |
+| `org.osate.xtext.aadl2.errormodel.ui` | 编辑器 UI、内容辅助、快速修复 |
+| `org.osate.xtext.aadl2.errormodel.edit` | EMF Edit 支持（属性视图） |
+| `org.osate.xtext.aadl2.errormodel.feature` | Feature 打包 |
+| `org.osate.aadl2.errormodel.instance` | 错误模型实例化（EMV2AnnexInstantiator） |
+| `org.osate.aadl2.errormodel.contrib` | 标准属性集贡献（EMV2.aadl 等） |
+| `org.osate.aadl2.errormodel.faulttree` | 故障树 Ecore 元模型 |
+| `org.osate.aadl2.errormodel.faulttree.generation` | FTAGenerator 算法实现 |
+| `org.osate.aadl2.errormodel.faulttree.edit` | 故障树 EMF Edit |
+| `org.osate.aadl2.errormodel.faulttree.design` | 故障树可视化（Sirius） |
+| `org.osate.aadl2.errormodel.propagationgraph` | 错误传播图 Ecore + 构建工具 |
+| `org.osate.aadl2.errormodel.analysis` | 错误影响正向分析 |
+| `org.osate.aadl2.errormodel.help` | 帮助文档 |
+| `org.osate.aadl2.errormodel.tests` | 单元测试 |
 
-### 故障树分析
-- **org.osate.aadl2.errormodel.faulttree** - 故障树模型
-- **org.osate.aadl2.errormodel.faulttree.generation** - 故障树自动生成
-- **org.osate.aadl2.errormodel.faulttree.edit** - 故障树编辑
-- **org.osate.aadl2.errormodel.faulttree.design** - 故障树设计工具
-- **org.osate.aadl2.errormodel.faulttree.tests** - 故障树测试
+---
 
-### 传播分析
-- **org.osate.aadl2.errormodel.propagationgraph** - 错误传播图
+## 2. 语法结构（ErrorModel.xtext）
 
-### 错误模型分析
-- **org.osate.aadl2.errormodel.analysis** - 错误模型分析工具
+EMV2 语法定义在 `emv2/org.osate.xtext.aadl2.errormodel/src/.../ErrorModel.xtext`，作为 AADL Annex 子语言集成（通过 `AnnexParserAgent` 嵌入）。
 
-### 文档和测试
-- **org.osate.aadl2.errormodel.help** - 帮助文档
-- **org.osate.aadl2.errormodel.tests** - 单元测试
+### 2.1 顶层结构
 
-## 核心概念
+```
+EMV2Root:
+    EMV2Library | EMV2Subclause[]
 
-### 1. 错误类型 (Error Types)
-定义系统中可能出现的错误类型：
-- 值错误（Value Error）
-- 时序错误（Timing Error）
-- 遗漏错误（Omission Error）
-- 委托错误（Commission Error）
-- 错误类型层次结构
+ErrorModelLibrary  — 可复用的错误模型库（.emv2 文件）
+├── ErrorType[]               — 错误类型定义（支持继承/别名）
+├── TypeSet[]                 — 错误类型集合
+├── ErrorBehaviorStateMachine[] — 错误行为状态机
+├── TypeMappingSet[]          — 类型映射集
+└── TypeTransformationSet[]   — 类型转换集
 
-### 2. 错误行为状态机 (Error Behavior State Machine)
-描述组件在不同错误状态之间的转换：
-- 正常状态（Operational）
-- 降级状态（Degraded）
-- 故障状态（Failed）
-- 状态转换规则
-- 概率和时间参数
+ErrorModelSubclause  — 附加到 AADL 组件的错误规格（annex error_model {** **}）
+├── ErrorPropagation[]        — 错误传播声明
+├── ErrorFlow[]               — 错误流（Source / Sink / Path）
+├── ErrorBehaviorTransition[] — 状态转换
+├── OutgoingPropagationCondition[] — 出站传播条件
+├── ErrorDetection[]          — 错误检测
+├── CompositeState[]          — 组合错误行为（系统级）
+└── PropagationPath[]         — 传播路径
+```
 
-### 3. 错误传播 (Error Propagation)
-定义错误如何在组件间传播：
-- 传播点（Propagation Points）
-- 传播路径（Propagation Paths）
-- 输入传播
-- 输出传播
+### 2.2 错误类型系统
 
-### 4. 错误事件 (Error Events)
-触发状态转换的事件：
-- 错误源（Error Source）
-- 错误汇（Error Sink）
-- 恢复事件（Recover Event）
-- 修复事件（Repair Event）
+```
+ErrorType
+├── name: String
+├── superType → ErrorType     — 继承（type X extends Y）
+└── aliased  → ErrorType      — 别名（type X renames Y）
 
-### 5. 组合错误行为 (Composite Error Behavior)
-描述子组件错误如何影响父组件：
-- 组合逻辑
-- 投票机制
-- 容错策略
+TypeSet — 错误类型集合（联合语义）
+└── typeTokens: TypeToken[]
 
-## 主要功能
+TypeToken — 类型构造器
+└── type: ErrorType[]         — 用 * 组合为乘积类型
+```
 
-### 1. 错误模型定义
-**功能**：
-- 定义错误类型库
-- 创建错误行为状态机
-- 指定错误传播
-- 定义错误流
+**设计要点**：层次化类型支持继承，TypeToken 的乘积类型支持复合错误建模（如 `{HardError * TimingError}`）。
 
-**示例用途**：
+### 2.3 错误传播与流
+
+```
+ErrorPropagation
+├── direction: in | out
+├── featureorPPRef → Feature / PropagationPoint
+├── typeSet → TypeSet
+└── not: boolean              — noerror 情况
+
+ErrorFlow (abstract)
+├── ErrorSource  — 错误产生源
+│   ├── sourceModelElement → NamedElement
+│   ├── failureModeReference → ErrorBehaviorState
+│   ├── typeTokenConstraint → TypeSet
+│   └── flowCondition → IfCondition (STRING / Resolute / Java)
+├── ErrorSink    — 错误终止点（含类型约束）
+└── ErrorPath    — 错误转换路径
+    ├── incoming / outgoing → ErrorPropagation
+    ├── typeMappingSet → TypeMappingSet
+    └── targetToken → TypeToken
+```
+
+### 2.4 错误行为状态机
+
+```
+ErrorBehaviorStateMachine
+├── states: ErrorBehaviorState[]
+│   ├── name: String
+│   ├── initial: boolean
+│   └── typeSet → TypeSet (可选状态类型约束)
+├── events: ErrorBehaviorEvent[]
+│   ├── ErrorEvent    — 错误事件（触发状态转换）
+│   ├── RepairEvent   — 修复事件
+│   └── RecoverEvent  — 恢复事件
+└── transitions: ErrorBehaviorTransition[]
+    ├── source → ErrorBehaviorState | all
+    ├── condition → ConditionExpression
+    └── target → ErrorBehaviorState | same state | Branch[] (概率分支)
+```
+
+**AADL 示例**：
 ```aadl
-error types
-  ServiceError: type;
-  ValueError: type;
-end types;
-
 error behavior Simple
-states
-  Operational: initial state;
-  Failed: state;
-transitions
-  Operational -[Failure]-> Failed;
+  states
+    Operational: initial state;
+    Failed: state;
+  transitions
+    Operational -[Failure]-> Failed;
 end behavior;
 ```
 
-### 2. 故障树生成 (FTA - Fault Tree Analysis)
-**功能**：
-- 自动从错误模型生成故障树
-- 计算顶事件概率
-- 识别最小割集
-- 可视化故障树
+### 2.5 条件表达式（布尔代数）
 
-**分析类型**：
-- 组件级故障树
-- 系统级故障树
-- 组合故障树
+```
+ConditionExpression
+├── AND, OR              — 基本逻辑运算
+├── AllExpression        — 全部满足
+├── OrmoreExpression     — N-of-M（至少 N 个满足）
+├── OrlessExpression     — 至多 N 个满足
+└── ConditionElement     — 引用事件/入站传播（带类型约束）
+```
 
-### 3. 错误传播分析
-**功能**：
-- 追踪错误传播路径
-- 分析错误影响范围
-- 识别单点故障
-- 验证容错设计
+### 2.6 组合错误行为（系统级）
 
-**输出**：
-- 传播图
-- 影响分析报告
-- 关键路径识别
+```
+CompositeState — 基于子组件错误状态决定父组件状态
+├── state → ErrorBehaviorState
+└── condition → 子组件状态条件表达式
 
-### 4. 可靠性分析
-**功能**：
-- 计算系统可靠性
-- MTTF (Mean Time To Failure)
-- 可用性分析
-- 失效率计算
+OutgoingPropagationCondition — 基于内部状态决定出站错误
+├── state → ErrorBehaviorState | allStates
+├── condition → ConditionExpression
+└── outgoing → ErrorPropagation | all | noerror
+```
 
-### 5. 安全性分析
-**功能**：
-- 危害分析
-- 风险评估
-- 安全完整性等级(SIL)验证
-- DO-178C/ARP4761合规性
+---
 
-## 分析方法
+## 3. 错误模型实例化
 
-### 1. 定性分析
-- 故障模式识别
-- 错误传播路径分析
-- 最小割集分析
-- 单点故障检测
+`EMV2AnnexInstantiator` 将文本错误规格转换为运行时实例模型（位于 `errormodel.instance` 插件）。
 
-### 2. 定量分析
-- 概率计算
-- 可靠性指标
-- 可用性计算
-- 风险量化
+### 3.1 实例化流水线
 
-### 3. 组合分析
-- 层次化分析
-- 组件组合
-- 系统级评估
+```
+对每个 ComponentInstance:
+  1. 提取所有 ErrorModelSubclause
+  2. 获取行为状态机
+  3. 创建 EMV2AnnexInstance（根容器）
+     ├── 4. 传播点实例化   → PropagationPointInstance
+     ├── 5. 错误传播实例化 → FeaturePropagation / AccessPropagation
+     │                       PointPropagation / BindingPropagation
+     │                       + 匿名类型集解析（AnonymousTypeSet + TypeInstance）
+     ├── 6. 错误事件实例化 → ErrorEventInstance / RepairEventInstance / RecoverEventInstance
+     ├── 7. 状态实例化     → StateInstance（标记 initial）
+     ├── 8. 转换实例化     → TransitionInstance
+     │       ├── source: SourceStateReference | AllSources
+     │       ├── condition: ConditionExpressionInstance
+     │       └── destination: DestinationStateReference | SameState | Branches
+     ├── 9. 出站传播条件实例化 → OutgoingPropagationConditionInstance
+     └── 10. 检测实例化    → DetectionInstance（IntegerCode / StringCode / ConstantCode）
 
-## 技术实现
+对 SystemInstance（系统级）:
+  ├── 11. 连接路径实例化 → ConnectionPath
+  └── 12. 绑定路径实例化 → BindingPath (processor / memory / connection / binding)
+```
 
-### 语言支持
-基于Xtext实现的DSL（领域特定语言）：
-- 语法定义
-- 语义验证
-- 代码补全
-- 快速修复
+### 3.2 关键实例类
 
-### 模型转换
-- 声明式模型 → 实例模型
-- 错误模型 → 故障树
-- AADL模型集成
+| 类 | 职责 |
+|----|------|
+| `EMV2AnnexInstance` | 根容器（extends AnnexInstance） |
+| `AbstractTypeSet` | 类型集基类，提供 `flatten()` |
+| `TypeSetInstance` | 引用命名类型集 |
+| `AnonymousTypeSet` | 内联类型定义 |
+| `TypeInstance` | 单个类型实例 |
+| `TypeProductInstance` | 乘积类型实例 |
+| `TransitionInstance` | 转换实例（源/条件/目标） |
+| `CompositeConditionExpression` | 复合条件求值基类 |
 
-### 分析引擎
-- 图算法（传播分析）
-- 概率计算引擎
-- 布尔代数运算（故障树）
+---
 
-## 应用场景
+## 4. 错误传播图
 
-### 航空航天
-- 飞行控制系统安全分析
-- ARP4761合规性验证
-- DO-178C认证支持
+定义在 `errormodel.propagationgraph/model/PropagationGraph.ecore`。
 
-### 汽车电子
-- ISO 26262功能安全
-- ASIL等级验证
-- 故障诊断设计
+```
+PropagationGraph — 系统级错误传播拓扑
+├── components: ComponentInstance[]
+├── paths: PropagationGraphPath[]
+│   ├── source / destination: PropagationPathEnd
+│   │   ├── componentInstance → ComponentInstance
+│   │   ├── errorPropagation  → ErrorPropagation
+│   │   └── connectionInstance → ConnectionInstance (可选)
+│   └── type: PropagationType (connection | binding | userDefined)
+└── connections: ConnectionInstance[]
+```
 
-### 医疗设备
-- IEC 62304医疗软件
-- 风险分析
-- 失效模式分析
+**生成方式**：`Util.generatePropagationGraph(root, false)` 从实例模型自动构建，遍历所有 ConnectionInstance 和 BindingInstance，将错误传播端点映射为图的边。
 
-### 工业控制
-- IEC 61508功能安全
-- SIL验证
-- 冗余设计验证
+---
 
-## 工具集成
+## 5. 故障树生成算法
 
-### 分析工具
-- PRISM（概率模型检验）
-- NuSMV（模型检验）
-- OpenFTA（故障树分析）
+`FTAGenerator`（位于 `faulttree.generation`）通过**反向遍历**从系统级错误状态追溯故障链。
 
-### 导出格式
-- 故障树图形（PNG, SVG）
-- CSV数据导出
-- XML模型导出
-- LaTeX报告
+### 5.1 算法流程
 
-## 标准支持
+```
+1. 根选择：用户选择顶层故障（错误状态或传播）
 
-### 安全标准
-- ARP4761 - 民用飞机系统和设备认证中的安全评估过程指南
-- DO-178C - 机载系统和设备认证中的软件考虑
-- ISO 26262 - 道路车辆功能安全
-- IEC 61508 - 电气/电子/可编程电子安全相关系统的功能安全
+2. 反向遍历（PropagationGraphBackwardTraversal）
+   ├── 从选中错误状态/传播出发
+   ├── 反向追踪错误路径和 Sink
+   ├── 展开入站错误的条件
+   └── 递归处理子组件
 
-### 错误模型标准
-- SAE-AS5506 - AADL错误模型附件标准
-- ARP4754A - 民用飞机和系统开发指南
+3. 事件层次构建
+   ├── FaultTree（根 Event）
+   ├── Event 类型: Basic（叶节点）| External | Undeveloped | Intermediate（门）
+   └── SubEventLogic: OR | AND | XOR | PriorityAnd | kOf | kOrmore | kOrless
 
-## 关键特性
+4. 门优化
+   ├── flattenGates()    — 合并同类嵌套门
+   ├── cleanupXORGates() — 移除单事件 XOR 门
+   ├── optimizeGates()   — 最小化事件树
+   └── minimalCutSet()   — 计算最小割集
 
-### 1. 层次化建模
-支持从组件到系统的层次化错误建模
+5. 概率计算
+   ├── fillProbabilities()    — 分配/传播概率
+   └── computeProbabilities() — 按门类型递归聚合概率
+```
 
-### 2. 概率支持
-支持概率和时间参数的定义和计算
+### 5.2 故障树类型
 
-### 3. 组合语义
-支持复杂的错误组合逻辑
+| 类型 | 说明 |
+|------|------|
+| `FaultTree` | 优化后的树，门已扁平化 |
+| `FaultTrace` | 保留完整路径细节的反向追踪 |
+| `CompositeParts` | 仅显示直接贡献者，不展开 |
+| `MinimalCutSet` | 最小割集表示（MCS 分析） |
 
-### 4. 工具自动化
-自动生成故障树和传播图
+### 5.3 正向错误影响分析
 
-### 5. 可扩展性
-支持自定义错误类型和分析
+`PropagateErrorSources` 执行正向影响分析（与 FTA 的反向遍历互补）：
+- 从错误源出发，前向追踪影响范围
+- 可配置最大追踪深度（默认 7 级）
+- 使用 `visited` 集合避免循环追踪
+- 使用 `alreadyTreated` 缓存避免重复处理
+- 生成 CSV 格式的影响报告
 
-## 依赖关系
+### 5.4 完整分析链
 
-### 依赖模块
-- **core** - AADL核心模型
-- **analyses** - 基础分析框架
+```
+AADL 文本 (annex error_model {** ... **})
+    ↓ AnnexParserAgent → EMV2AnnexParser
+ErrorModel Ecore 模型（声明式）
+    ↓ EMV2AnnexInstantiator
+EMV2AnnexInstance（运行时实例）
+    ↓ Util.generatePropagationGraph()
+PropagationGraph（传播拓扑）
+    ↓ FTAGenerator / PropagateErrorSources
+FaultTree / 影响报告
+    ↓ 门优化 + 概率计算
+分析结果（Eclipse Markers + CSV 报告）
+```
 
-### 被依赖
-- **alisa** - 使用错误模型进行验证
+---
 
-## 配置和使用
+## 6. 标准支持与应用领域
 
-### 错误库配置
-- 预定义错误类型库
-- 自定义错误库
-- 行业标准库
+| 标准 | 对应功能 |
+|------|---------|
+| ARP4761 | FHA/FTA/FMEA 分析流程支持 |
+| ARP4754A | 民用飞机系统开发指南中的安全需求 |
+| DO-178C | 机载软件认证中的错误处理要求 |
+| ISO 26262 | 道路车辆功能安全（ASIL 等级） |
+| IEC 61508 | 工业安全相关系统（SIL 验证） |
+| SAE-AS5506 | AADL 错误模型附件标准 |
 
-### 分析参数
-- 分析深度
-- 概率阈值
-- 时间单位
-- 输出格式
+---
 
-## 下一步分析
+## 7. 依赖关系
 
-- [ ] 深入研究错误模型语法和语义
-- [ ] 分析故障树生成算法
-- [ ] 研究错误传播图构建
-- [ ] 探索概率计算引擎实现
-- [ ] 分析与安全标准的对应关系
-- [ ] 研究自定义分析器开发
-- [ ] 探索与其他安全分析工具的集成
+```
+core（AADL 实例模型） ──→ emv2（EMV2AnnexInstance）
+analyses（分析框架）  ──→ emv2（Handler 层次）
+emv2 ──→ alisa（Verify DSL 中引用错误状态作为验证条件）
+emv2 ──→ ge（GE errormodel Handler 可视化错误传播）
+```

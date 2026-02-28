@@ -1,7 +1,7 @@
 # OSATE2 分析工作进度
 
 > 本文档记录对 osate2 项目的分析进度，作为后续持续分析的大纲。
-> 最后更新：2026-02-28
+> 最后更新：2026-02-28（第二次更新）
 
 ---
 
@@ -38,6 +38,14 @@
 | [core/README.md](core/README.md) | 1303 | ✅ 深入：AADL2 元模型 API、实例模型、属性系统、Result 元模型、Xtext 组件 |
 | [analyses/README.md](analyses/README.md) | 1032 | ✅ 深入：Handler 层次、流延迟算法、资源预算、安全分析框架 |
 | [alisa/README.md](alisa/README.md) | 1204 | ✅ 深入：六层 DSL 架构、AssureProcessor 执行流程、EMF 结果模型、reqtrace 状态 |
+| [emv2/README.md](emv2/README.md) | 302 | ✅ 较深：Xtext 语法/类型系统/状态机/条件表达式、实例化流水线、传播图、故障树算法 *(本次更新)* |
+| [ge/README.md](ge/README.md) | 251 | ✅ 较深：四层架构、BOH 模式完整实现、图表数据模型、双向同步、渲染管线、扩展点 *(本次更新)* |
+
+### 1.4 新增源码级专题文档
+
+| 文档 | 行数 | 深度评估 |
+|------|-----:|---------|
+| [15_属性系统深入分析.md](15_属性系统深入分析.md) | 530 | ✅ 深入：PropertyType/Expression 层次、求值流程、PropertyUtils API、模态值处理、自定义属性集开发 *(本次新建)* |
 
 ---
 
@@ -45,28 +53,34 @@
 
 这些子项目 README 已有骨架，但停留在概述层面，未深入源码实现。
 
-### 2.1 emv2/README.md（269 行，偏浅）
+### 2.1 emv2/README.md ✅ 已完成整合（302 行，较深）
 
-已有内容：架构概述、插件列表、功能介绍（10 号文档已有源码级内容，需整合）
+本次已整合 10 号文档中的全部 EMV2 源码级内容，覆盖：
+- [x] ErrorModel.xtext 语法结构（顶层/类型系统/传播声明/状态机/条件表达式）
+- [x] 错误模型实例化流水线（EMV2AnnexInstantiator 12 步流程）
+- [x] 传播图（PropagationGraph）Ecore 模型与构建方式
+- [x] 故障树生成算法（反向遍历/门优化/概率计算）
+- [x] 正向错误影响分析（PropagateErrorSources）
+- [x] 完整分析链与依赖关系
 
-**待深入的源码分析：**
-- [ ] ErrorModel.xtext 语法细节（状态类型、传播声明、错误库）
-- [ ] 故障树生成算法（`FaultTreeUtils`、`FaultTreeType` 枚举）——10 号文档有概述，需补充具体算法
-- [ ] 概率计算引擎实现（`EMV2Properties` 中的概率读取）
-- [ ] 错误传播图（PropagationGraph）的构建与查询 API
-- [ ] 与 ARP4761/DO-178C 标准对应关系的实现细节
+**仍可深入（可选）：**
+- [ ] 概率计算引擎的具体数学实现（OR/AND 门的概率聚合公式）
+- [ ] 与安全标准工具链的集成（PRISM/NuSMV）
 
-### 2.2 ge/README.md（397 行，偏浅）
+### 2.2 ge/README.md ✅ 已完成整合（251 行，较深）
 
-已有内容：架构概述、技术栈、主要功能（10 号文档已有 BOH 模式分析，需整合）
+本次已整合 10 号文档中的全部 GE 源码级内容，覆盖：
+- [x] 四层架构（BO Layer → AgeDiagram → GefAgeDiagram → AgeEditor）
+- [x] BOH 模式：Handler 接口、注册/发现机制、各域 Handler 覆盖范围
+- [x] 图表数据模型（diagram.ecore）结构与 XMI 序列化
+- [x] 双向同步：正向（AADL→图）和反向（图→AADL）机制
+- [x] 渲染管线：StyleCalculator→StyleToFx→FxStyleApplier→场景图
+- [x] 场景节点类型、布局系统（ELK 集成）
+- [x] Eclipse 编辑器集成与扩展点
 
-**待深入的源码分析：**
-- [ ] Business Object Handler（BOH）模式完整分析整合到子项目文档
-- [ ] 图形模型（DiagramElement）到 AADL 模型的双向映射机制
-- [ ] JavaFX 渲染管线与 e(fx)clipse 集成
-- [ ] 自动布局算法实现（`org.osate.ge.layout` 包）
+**仍可深入（可选）：**
 - [ ] 实验性分支（`osate-ge.experimental.*`）的功能与状态
-- [ ] 与 EMV2、BA 的图形集成扩展点
+- [ ] 自定义 BOH 开发的完整实战示例
 
 ### 2.3 ba/README.md（356 行，偏浅）
 
@@ -122,15 +136,19 @@
 
 这些主题在现有文档中仅被零散提及，尚无专门分析。
 
-### 3.1 属性系统深入分析（优先级：高）
+### 3.1 属性系统深入分析 ✅ 已完成（530 行）
 
-**建议新建文档**：`15_属性系统深入分析.md`
+**文档**：[15_属性系统深入分析.md](15_属性系统深入分析.md)
 
-- [ ] AADL 属性求值算法（继承链、覆盖规则、模式相关值）
-- [ ] `PropertyUtils` / `GetProperties` 工具类使用模式
-- [ ] 属性集的作用域与可见性规则（跨包引用）
-- [ ] 自定义属性集开发指南（与 tools 中代码生成器结合）
-- [ ] 模式相关属性值（Modal Property Values）的处理机制
+- [x] PropertyType / PropertyExpression 完整层次结构
+- [x] Property / PropertyAssociation / ModalPropertyValue 详细结构
+- [x] 完整属性求值流程（acceptsProperty → PropertyAcc → NamedElementImpl）
+- [x] 循环引用检测机制（ThreadLocal 栈）
+- [x] 模态属性值（ModalPropertyValue）按 SOM 的选择算法
+- [x] PropertyUtils 全 API（标量/带单位数值/范围/列表/异常类型）
+- [x] GetProperties 全 API（定义查找/标准属性集强类型 getter）
+- [x] 自定义属性集开发 + tools 代码生成器集成指南
+- [x] 完整使用示例（整数/带单位实数/列表/枚举/模态属性）
 
 ### 3.2 Resolute 约束验证语言（优先级：高）
 
@@ -174,20 +192,25 @@
 ## 四、分析路线图
 
 ```
-阶段一：整合已有源码级内容到子项目 README（短期）
-  ├── emv2/README.md  ← 整合 10 号文档中 EMV2 部分
-  ├── ge/README.md    ← 整合 10 号文档中 GE/BOH 部分
-  └── ba/README.md    ← 整合 12 号文档中 BA 部分
+阶段一：整合已有源码级内容到子项目 README ✅ 部分完成
+  ├── emv2/README.md  ✅ 已完成（302 行，较深）
+  ├── ge/README.md    ✅ 已完成（251 行，较深）
+  └── ba/README.md    ⬜ 待整合（整合 12 号文档中 BA 部分）
 
-阶段二：新开源码级专题分析（中期）
-  ├── 15_属性系统深入分析.md      （高优先级）
-  ├── 16_Resolute验证语言.md      （高优先级）
-  └── 17_模型切片与ARINC653.md   （中优先级）
+阶段二：新开源码级专题分析 ⬜ 进行中
+  ├── 15_属性系统深入分析.md      ✅ 已完成（530 行，深入）
+  ├── 16_Resolute验证语言.md      ⬜ 待分析（高优先级）
+  └── 17_模型切片与ARINC653.md   ⬜ 待分析（中优先级）
 
 阶段三：实践与性能（长期）
-  ├── 18_扩展开发实战指南.md
-  └── 19_性能与EASE脚本.md
+  ├── 18_扩展开发实战指南.md      ⬜ 待编写
+  └── 19_性能与EASE脚本.md        ⬜ 待分析
 ```
+
+**下次继续建议从以下任一项开始**：
+1. `ba/README.md` 深化——整合 12 号文档中 BA 的 ANTLR 语法、状态机验证、代码生成目标内容
+2. `16_Resolute验证语言.md`——读取 `core/org.osate.resolute` 源码，分析规则/函数/证明体系
+3. `releng/README.md` 完善——补充 CI 配置文件实际内容
 
 ---
 

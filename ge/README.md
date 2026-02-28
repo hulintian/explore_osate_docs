@@ -1,397 +1,251 @@
 # GE - 图形编辑器
 
-## 模块概述
+GE（Graphical Editor）是 OSATE2 的图形化建模组件，使用 JavaFX + e(fx)clipse 技术栈，通过 **Business Object Handler（BOH）模式** 实现 AADL 模型与图形视图的双向绑定。
 
-GE (Graphical Editor) 是OSATE2的图形化建模工具，提供了直观的可视化界面来创建、编辑和查看AADL架构模型。它使用现代化的图形技术栈，支持拖放操作、自动布局、实时验证等功能。
+源码位置：`osate2/ge/`，987 个 Java 文件，130,898 行（全部手写，无 Xtend），6 个 Eclipse 插件。
 
-## 主要特性
+---
 
-### 1. 可视化建模
-**功能**：
-- 拖放式组件创建
-- 图形化连接绘制
-- 层次化视图
-- 多图支持
+## 1. 插件组织
 
-**支持的元素**：
-- 组件（Component）
-- 特性（Feature）
-- 连接（Connection）
-- 流规范（Flow Specification）
-- 模式（Mode）
-- 子组件（Subcomponent）
+| 插件 | 职责 |
+|------|------|
+| `org.osate.ge` | 核心框架：BOH 注册表、图表数据模型、同步引擎、渲染管线 |
+| `org.osate.ge.aadl2` | AADL 元素的 BOH 实现（组件、特征、连接、流、模式） |
+| `org.osate.ge.errormodel` | EMV2 错误传播的 BOH 实现 |
+| `org.osate.ge.ba` | 行为附件（BA）状态机的 BOH 实现 |
+| `org.osate.ge.swt` | SWT 辅助工具（嵌入 JavaFX 到 SWT） |
+| `org.osate.ge.tests` | 单元/集成测试 |
 
-### 2. 双向同步
-**特性**：
-- 图形视图 ↔ 文本视图同步
-- 实时更新
-- 多编辑器协同
-- 一致性保证
+---
 
-### 3. 自动布局
-**布局算法**：
-- 层次化布局
-- 增量布局
-- 手动调整
-- 对齐和分布
+## 2. 四层架构
 
-### 4. 导航和探索
-**功能**：
-- 大纲视图
-- 层次导航
-- 快速定位
-- 过滤和搜索
-
-## 技术架构
-
-### 图形技术栈
-
-#### 基础框架
-根据pom.xml的配置，GE模块使用了e(fx)clipse技术：
-- **JavaFX** - 现代化的Java图形框架
-- **e(fx)clipse** - Eclipse和JavaFX的集成
-
-#### 渲染引擎
-- 矢量图形渲染
-- 硬件加速
-- 高性能更新
-
-### 架构设计
-
-#### MVC模式
 ```
-Model (AADL模型)
-  ↓
-View (图形视图)
-  ↓
-Controller (编辑器控制器)
+Business Object Layer     — 领域模型（AADL / EMV2 / BA 元素）
+        ↓
+Diagram Runtime (AgeDiagram)  — 内存中图表表示（DiagramElement 树）
+        ↓
+Diagram Rendering (GefAgeDiagram) — JavaFX 场景图生成
+        ↓
+UI Layer (AgeEditor)      — Eclipse EditorPart 集成
 ```
 
-#### 分层架构
-```
-UI层 (用户交互)
-  ↓
-业务逻辑层 (编辑操作)
-  ↓
-模型层 (AADL EMF模型)
+---
+
+## 3. Business Object Handler（BOH）模式
+
+核心设计模式——图中所有可见元素都是"业务对象"（Business Object，BO），每种 BO 由一个 Handler 管理。
+
+### 3.1 Handler 接口
+
+```java
+BusinessObjectHandler {
+    isApplicable(ctx)  → boolean          // 是否管理此类 BO
+    getCanonicalReference(ctx)            // 永久标识（从模型根的路径）
+    getRelativeReference(ctx)             // 父级相对标识（用于 XMI 持久化）
+    getGraphicalConfiguration(ctx)        // 视觉表示：形状/颜色/标签/连接线型
+    getName(ctx)       → String           // 大纲视图显示名
+    getNameForDiagram(ctx) → String       // 图中标签文字
+    canRename() / validateName()          // 重命名能力与验证
+    canDelete() / canCopy()               // 编辑能力声明
+    getIconId(ctx)                        // 大纲视图图标 ID
+}
 ```
 
-## 核心功能
+### 3.2 注册与发现
 
-### 1. 图表管理
+- Handler 通过扩展点注册：`org.osate.ge.businessObjectHandlers`
+- **BusinessObjectProvider** 为给定上下文贡献子 BO，注册点：`org.osate.ge.businessObjectProviders`
+- 多个 Handler 可竞争同一 BO，第一个 `isApplicable()` 返回 `true` 者胜出
+
+### 3.3 各域 Handler 覆盖范围
+
+| Handler 包 | 覆盖范围 |
+|-----------|---------|
+| `org.osate.ge.aadl2` | SystemType/Impl、ProcessType/Impl、ThreadType/Impl 等所有 AADL 组件，Feature、Connection、FlowSpec、Mode |
+| `org.osate.ge.errormodel` | ErrorPropagation、ErrorBehaviorState、ErrorFlow、CompositeState |
+| `org.osate.ge.ba` | BehaviorAnnex、BehaviorState、BehaviorTransition |
+
+---
+
+## 4. 图表数据模型（diagram.ecore）
+
+定义在 `ge/org.osate.ge/model/diagram.ecore`，当前格式版本：7。
+
+```
+Diagram
+├── formatVersion: int
+├── config: DiagramConfiguration
+│   ├── type: String              — 图表类型 ID（Package / Structure / Custom）
+│   ├── context: CanonicalBusinessObjectReference  — 根 BO（确定图表范围）
+│   ├── enabledAadlProperties: String[]            — 显示哪些 AADL 属性
+│   └── connectionPrimaryLabelsVisible: Boolean
+└── element[*]: DiagramElement    — 树结构（递归嵌套）
+
+DiagramElement
+├── uuid: String                  — 图内唯一标识
+├── bo: RelativeBusinessObjectReference  — 引用的业务对象
+├── position: Point (x, y)
+├── size: Dimension (width, height)
+├── dockArea: String              — 停靠区域（TOP/BOTTOM/LEFT/RIGHT）
+├── bendpoints: Point[]           — 连接弯折点
+├── primaryLabelPosition: Point
+├── background / outline / fontColor: Color
+├── fontSize / lineWidth: Double
+├── primaryLabelVisible: Boolean
+├── image: String                 — 自定义图片引用
+└── showAsImage: Boolean
+```
+
+**序列化**：XMI 格式，UUID 标识元素，相对引用（RelativeBusinessObjectReference）保证跨机器可移植性。
+
+---
+
+## 5. 双向同步机制
+
+### 5.1 AADL 模型 → 图表（正向同步）
+
+```
+AADL 模型变更（ResourceChangeEvent）
+    ↓ ModelChangeNotifier
+BusinessObjectTreeUpdater → DiagramUpdater → AgeDiagram → 场景图
+        ↓                           ↓
+BusinessObjectProvider          为新 BO 创建 DiagramElement
+（发现新子 BO）                  为删除的 BO 创建"Ghost Element"（保留布局）
+```
+
+**更新流水线**：
+1. `DiagramToBusinessObjectTreeConverter`：从当前图表构建 BO 树快照
+2. `BusinessObjectTreeUpdater`：基于 Handler/Provider 展开树，识别新增/删除/变更
+3. `DiagramUpdater`：协调树与 DiagramElement 列表，维护位置/大小
+
+### 5.2 图表编辑 → AADL 模型（反向同步）
+
+```
+用户在图表中编辑（创建/删除/重命名）
+    ↓ Handler.canDelete() / Handler.deleter()
+    ↓ Handler.canRename() / Handler.renamer()
+AADL EMF 模型写操作（在 WorkspaceJob 中执行）
+    ↓ 触发正向同步（见上）
+图表更新
+```
+
+### 5.3 关键服务
+
+| 服务 | 说明 |
+|------|------|
+| `ReferenceResolutionService` | 解析相对引用到运行时 BO 实例 |
+| `ReferenceBuilderService` | 从 BO 重建规范引用 |
+| **Ghost Elements** | 隐藏元素保留布局信息，便于 BO 重新出现时恢复位置 |
+| **Future Elements** | 为正在创建的 BO 预分配位置 |
+
+---
+
+## 6. 渲染管线
+
+```
+AgeDiagram 变更事件
+    ↓ DiagramModificationListener
+场景节点创建/修改
+    ├── GefDiagramElement（元数据容器）
+    ├── sceneNode（JavaFX Node）
+    └── primaryLabel（LabelNode）
+    ↓
+StyleCalculator（图形配置 → 渲染器无关 Style 对象）
+    ↓
+StyleToFx（Style → JavaFX FxStyle）
+    ↓
+FxStyleApplier（FxStyle → JavaFX 节点属性）
+    ↓
+场景图更新（FXCanvas 呈现到 SWT）
+```
+
+### 6.1 场景节点类型
+
+| 节点类型 | 用途 |
+|---------|------|
+| `DiagramRootNode` | 所有形状和连接的容器 |
+| `ContainerShape` | 组件的复合形状（可嵌套） |
+| `DockedShape` | 停靠到容器边缘的特征形状 |
+| `ConnectionNode` | 带弯折点的连接线 |
+| `LabelNode` | 带样式的文本标签 |
+| `FeatureGroupNode` | 特征组的圆形标记 |
+| `FlowIndicatorNode` | 流规范指示器 |
+| `ImageNode` | 自定义图片元素 |
+
+### 6.2 布局系统
+
+| 机制 | 说明 |
+|------|------|
+| **Position** | 绝对坐标或相对于父级 |
+| **DockArea** | 停靠侧（TOP/BOTTOM/LEFT/RIGHT） |
+| **Bendpoints** | 连接路由点列表 |
+| **ELK 集成** | 自动布局引擎（`AgeLayoutOptions`），算法可选 |
+| **手动定位** | 用户拖动后持久化到 diagram.ecore |
+
+---
+
+## 7. Eclipse 编辑器集成
+
+```
+AgeEditor（Eclipse EditorPart）
+├── FXCanvas            — 将 JavaFX 场景嵌入 SWT
+├── Scene Graph         — JavaFX Group 包含 DiagramRootNode
+├── Interaction Layer   — 鼠标/键盘事件处理
+├── Tool System         — 调色板工具（选择/形状创建/连接绘制）
+├── ModelChangeNotifier — 监听外部 AADL 模型变更
+├── AgeContentOutlinePage — 图表元素树形大纲视图
+├── TabbedPropertySheetPage — 属性标签页（SWT 嵌套）
+└── IOperationHistory   — 撤销/重做（Eclipse 标准命令框架）
+```
+
 **图表类型**：
-- 包图（Package Diagram）
-- 结构图（Structure Diagram）
-- 类型图（Classifier Diagram）
-- 实例图（Instance Diagram）
+- **Package Diagram**：显示 AADL 包中的分类器
+- **Structure Diagram**：显示组件实现的内部结构
+- **Custom Diagram**：用户自由组合任意元素
 
-**图表操作**：
-- 创建新图
-- 重命名图
-- 删除图
-- 导入/导出图
+---
 
-### 2. 元素编辑
-**创建操作**：
-- 从调色板拖放
-- 上下文菜单创建
-- 快捷键创建
-- 向导式创建
+## 8. 扩展点
 
-**修改操作**：
-- 属性编辑
-- 可视化移动
-- 大小调整
-- 样式定制
+| 扩展点 | 用途 |
+|--------|------|
+| `org.osate.ge.businessObjectHandlers` | 注册自定义 BO Handler |
+| `org.osate.ge.businessObjectProviders` | 贡献子业务对象（决定图中显示哪些子元素） |
+| `org.osate.ge.diagramTypes` | 注册新图表类型 |
+| `org.osate.ge.images` | 注册图片资源 |
+| `org.osate.ge.tools` | 注册自定义调色板工具 |
+| `org.osate.ge.contentFilters` | 过滤图中显示的 BO |
 
-**删除操作**：
-- 单个删除
-- 批量删除
-- 级联删除选项
+---
 
-### 3. 连接编辑
-**连接类型**：
-- 端口连接
-- 访问连接
-- 参数连接
-- 特性组连接
+## 9. 与其他模块的集成
 
-**连接操作**：
-- 智能端点识别
-- 路径优化
-- 弯曲点调整
-- 连接验证
+```
+AADL 文本（core）
+    ↓ EMF ResourceSet
+业务对象（AADL 元素）
+    ↓ ge.aadl2 Handler
+图表 DiagramElement（struct/package diagram）
 
-### 4. 层次化编辑
-**导航**：
-- 下钻（Drill Down）到子组件
-- 上浮（Drill Up）到父组件
-- 面包屑导航
-- 快速跳转
+annex error_model {** ... **}（emv2）
+    ↓ EMV2AnnexInstantiator → EMV2AnnexInstance
+    ↓ ge.errormodel Handler
+错误传播可视化（独立 diagram）
 
-**层次视图**：
-- 展开/折叠
-- 层次过滤
-- 多层显示
+annex behavior_specification {** ... **}（ba）
+    ↓ ge.ba Handler
+行为状态机可视化
+```
 
-### 5. 外观定制
-**视觉样式**：
-- 颜色主题
-- 字体设置
-- 图标选择
-- 线条样式
+---
 
-**布局选项**：
-- 网格对齐
-- 自动间距
-- 边距设置
+## 10. 依赖关系
 
-## 用户交互
-
-### 调色板 (Palette)
-**分组**：
-- 基本元素
-- 组件类型
-- 特性类型
-- 连接类型
-- 注释工具
-
-**搜索**：
-- 快速过滤
-- 关键字搜索
-
-### 属性面板
-**显示内容**：
-- 元素属性
-- AADL属性
-- 可视化属性
-- 验证信息
-
-**编辑方式**：
-- 内联编辑
-- 下拉选择
-- 文本输入
-- 引用浏览
-
-### 大纲视图
-**功能**：
-- 树状结构
-- 同步选择
-- 快速导航
-- 过滤显示
-
-### 上下文菜单
-**常用操作**：
-- 创建元素
-- 编辑属性
-- 布局调整
-- 验证检查
-- 重构操作
-
-## 高级特性
-
-### 1. 模式可视化
-**功能**：
-- 模式切换视图
-- 模式特定配置显示
-- 模式转换可视化
-
-### 2. 流可视化
-**功能**：
-- 流路径高亮
-- 端到端流显示
-- 流规范编辑
-
-### 3. 实时验证
-**功能**：
-- 即时错误提示
-- 警告标记
-- 快速修复建议
-- 验证结果显示
-
-### 4. 重构支持
-**操作**：
-- 重命名
-- 提取子组件
-- 内联元素
-- 移动元素
-
-### 5. 模板和模式
-**功能**：
-- 组件模板
-- 设计模式库
-- 快速应用
-- 自定义模板
-
-## 性能优化
-
-### 渲染优化
-- 视口裁剪
-- 增量渲染
-- 缓存策略
-- 延迟加载
-
-### 大模型支持
-- 虚拟化渲染
-- 分页显示
-- 按需加载
-- 内存管理
-
-## 导入导出
-
-### 图像导出
-**格式**：
-- PNG
-- SVG
-- PDF
-- JPEG
-
-**选项**：
-- 分辨率设置
-- 背景透明
-- 选区导出
-- 批量导出
-
-### 图表导入
-- 从文本生成图
-- 从实例生成图
-- 模板导入
-
-## 集成功能
-
-### Eclipse集成
-- 工作台集成
-- 编辑器生命周期
-- 保存策略
-- 撤销/重做
-
-### OSATE集成
-- 与分析工具联动
-- 分析结果可视化
-- 实例图生成
-- 错误标记显示
-
-### 版本控制
-- Git友好格式
-- 合并支持
-- 差异显示
-
-## 扩展机制
-
-### 自定义图形
-- 自定义形状
-- 自定义装饰器
-- 自定义样式
-
-### 自定义工具
-- 自定义调色板项
-- 自定义操作
-- 自定义验证
-
-## 可访问性
-
-### 键盘导航
-- 全键盘操作
-- 快捷键支持
-- Tab导航
-
-### 缩放和平移
-- 鼠标滚轮缩放
-- 平移操作
-- 缩放级别控制
-- 适应窗口
-
-## 用户体验
-
-### 智能提示
-- 类型建议
-- 连接提示
-- 命名建议
-- 约束提示
-
-### 错误处理
-- 友好的错误消息
-- 恢复建议
-- 自动修复
-- 撤销支持
-
-### 性能反馈
-- 进度指示
-- 操作反馈
-- 状态提示
-
-## 应用场景
-
-### 初学者
-- 降低学习曲线
-- 可视化理解
-- 交互式探索
-
-### 架构师
-- 快速设计
-- 原型构建
-- 架构评审
-
-### 文档制作
-- 架构图生成
-- 演示材料
-- 设计文档
-
-### 协作开发
-- 团队沟通
-- 设计讨论
-- 代码评审
-
-## 技术依赖
-
-### 外部依赖
-- Eclipse Platform
-- JavaFX
-- e(fx)clipse
-- EMF (Eclipse Modeling Framework)
-
-### OSATE依赖
-- **core** - AADL核心模型
-- 其他模块的可视化支持
-
-## 配置选项
-
-### 编辑器设置
-- 默认布局算法
-- 自动保存
-- 网格设置
-- 默认样式
-
-### 性能设置
-- 渲染质量
-- 动画效果
-- 缓存大小
-
-## 已知限制
-
-### 大规模模型
-- 性能下降可能发生
-- 建议使用过滤和分层
-
-### 并发编辑
-- 需要注意冲突
-- 建议定期同步
-
-## 未来发展
-
-### 计划功能
-- 更多布局算法
-- 增强的可视化
-- 更好的性能
-- 触摸屏支持
-
-## 下一步分析
-
-- [ ] 深入研究JavaFX渲染机制
-- [ ] 分析图形模型和AADL模型的映射
-- [ ] 研究自动布局算法实现
-- [ ] 探索自定义图形元素开发
-- [ ] 分析性能优化策略
-- [ ] 研究双向同步机制
-- [ ] 探索扩展点和插件机制
-- [ ] 分析与其他OSATE模块的集成方式
+```
+core（AADL 元模型、EMF、Xtext） ──→ ge（读取 AADL 元素作为 BO）
+emv2（EMV2AnnexInstance）       ──→ ge（ge.errormodel Handler）
+ba（BehaviorAnnex）             ──→ ge（ge.ba Handler）
+ge ────────────────────────────────→ 无下游依赖（纯展示层）
+```

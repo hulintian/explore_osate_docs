@@ -30,6 +30,7 @@
 | [行为附件设计](12_行为附件设计.md) | ANTLR 4.4 语法、BehaviorAnnex 元模型、动作语言、状态机验证、GE 集成 |
 | [UI 框架与导航设计](13_UI框架与导航设计.md) | AADL 导航器、属性视图、向导框架、首选项页面、错误 Marker 框架、命令/Handler 体系 |
 | [构建系统与测试设计](14_构建系统与测试设计.md) | Maven/Tycho 构建层次、目标平台、测试基础设施、产品打包、CI/CD 流水线、代码生成 |
+| [属性系统深入分析](15_属性系统深入分析.md) | PropertyType/Expression 层次、属性求值流程、PropertyUtils/GetProperties API、模态属性值处理、自定义属性集开发 |
 
 ### 子项目详细文档
 
